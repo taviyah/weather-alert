@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cloud -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,58 a12,12 0 0,1 1.5,-23.9 a17,17 0 0,1 32.2,3.6 a11,11 0 0,1 -1.7,20.3 z" />
+    <!-- Rain -->
+    <path
+        android:fillColor="#9BD1E5"
+        android:pathData="M42,63 l-3,9 h4 l3,-9 z M53,63 l-3,9 h4 l3,-9 z M64,63 l-3,9 h4 l3,-9 z" />
+    <!-- Alert bang -->
+    <path
+        android:fillColor="#FFC857"
+        android:pathData="M52,26 h5 l-1,16 h-3 z M52,45 h5 v5 h-5 z" />
+</vector>

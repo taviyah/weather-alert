@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Weather Alert</string>
+    <string name="widget_description">Whether anything is coming in the next few days, and what to do about it today.</string>
+</resources>
