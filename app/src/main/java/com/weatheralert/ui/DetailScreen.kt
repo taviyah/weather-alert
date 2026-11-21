@@ -77,7 +77,7 @@ fun LocationDetailScreen(
     /** Offers to start watching the shown place; null when it is already watched. */
     onWatch: (() -> Unit)? = null,
 ) {
-    val today = LocalDate.now()
+    val today = card?.location?.today() ?: LocalDate.now()
     Scaffold(
         topBar = {
             TopAppBar(

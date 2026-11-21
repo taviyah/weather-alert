@@ -124,21 +124,21 @@ object AlertEngine {
                         AlertKind.HEAT,
                         if (severe) Severity.MAJOR else Severity.NOTABLE,
                         if (severe) "Extreme heat" else "Hot day",
-                        "High ${deg(day.tempMax)}, feels like ${deg(day.apparentMax)}",
-                        (if (severe) "extreme heat" else "hot") + ", high ${deg(day.tempMax)}",
+                        "High ${t.tempUnit.temp(day.tempMax)}, feels like ${t.tempUnit.temp(day.apparentMax)}",
+                        (if (severe) "extreme heat" else "hot") + ", high ${t.tempUnit.temp(day.tempMax)}",
                     )
                 }
                 val frost = day.tempMin <= t.frostC && prev.tempMin > t.frostC + band
                 if (frost) {
-                    add(AlertKind.FROST, Severity.MAJOR, "Frost", "Low ${deg(day.tempMin)}", "frost, low ${deg(day.tempMin)}")
+                    add(AlertKind.FROST, Severity.MAJOR, "Frost", "Low ${t.tempUnit.temp(day.tempMin)}", "frost, low ${t.tempUnit.temp(day.tempMin)}")
                 }
                 if (!frost && day.tempMin <= t.coldC && prev.tempMin > t.coldC + band) {
                     add(
                         AlertKind.COLD,
                         Severity.NOTABLE,
                         "Cold night",
-                        "Low ${deg(day.tempMin)}, feels like ${deg(day.apparentMin)}",
-                        "cold night, low ${deg(day.tempMin)}",
+                        "Low ${t.tempUnit.temp(day.tempMin)}, feels like ${t.tempUnit.temp(day.apparentMin)}",
+                        "cold night, low ${t.tempUnit.temp(day.tempMin)}",
                     )
                 }
             }
@@ -232,12 +232,12 @@ object AlertEngine {
             // When feels-like is what tripped it, the real thermometer reading goes in too —
             // otherwise "turning colder, -4" on a night that only fell 2 reads as a wrong forecast.
             detail = buildString {
-                append("${worst.label} ${deg(worst.from)} to ${deg(worst.to)} ")
-                append("($sign${String.format(Locale.US, "%.0f", mag)}°)")
-                if (worst.apparent) append(", actual ${deg(worst.rawFrom)} to ${deg(worst.rawTo)}")
+                append("${worst.label} ${t.tempUnit.temp(worst.from)} to ${t.tempUnit.temp(worst.to)} ")
+                append("($sign${t.tempUnit.delta(mag)})")
+                if (worst.apparent) append(", actual ${t.tempUnit.temp(worst.rawFrom)} to ${t.tempUnit.temp(worst.rawTo)}")
             },
             short = (if (rising) (if (major) "much warmer" else "warmer") else (if (major) "much colder" else "colder")) +
-                ", ${worst.label.lowercase(Locale.US)} ${deg(worst.from)}→${deg(worst.to)}",
+                ", ${worst.label.lowercase(Locale.US)} ${t.tempUnit.temp(worst.from)}→${t.tempUnit.temp(worst.to)}",
         )
     }
 
@@ -269,5 +269,4 @@ object AlertEngine {
         )
     }
 
-    private fun deg(v: Double) = "${v.roundToInt()}°"
 }

@@ -9,24 +9,21 @@ import com.weatheralert.model.TempUnit
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.roundToInt
 
-private val shortDay = DateTimeFormatter.ofPattern("EEE", Locale.getDefault())
-private val shortDate = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+// Looked up on each use rather than stored once, so a change of phone language applies at once.
+private fun shortDay() = DateTimeFormatter.ofPattern("EEE", Locale.getDefault())
+private fun shortDate() = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
 fun LocalDate.relativeLabel(today: LocalDate): String = when (this) {
     today -> "Today"
     today.plusDays(1) -> "Tomorrow"
-    else -> format(shortDay)
+    else -> format(shortDay())
 }
 
-fun LocalDate.dateLabel(): String = format(shortDate)
+fun LocalDate.dateLabel(): String = format(shortDate())
 
 /** Thresholds are stored in Celsius; only what reaches the screen is converted. */
-fun Double.asTemp(unit: TempUnit): String {
-    val v = if (unit == TempUnit.FAHRENHEIT) this * 9.0 / 5.0 + 32.0 else this
-    return "${v.roundToInt()}°"
-}
+fun Double.asTemp(unit: TempUnit): String = unit.temp(this)
 
 fun Double.asTempDelta(unit: TempUnit): String {
     val v = if (unit == TempUnit.FAHRENHEIT) this * 9.0 / 5.0 else this

@@ -23,6 +23,8 @@ import com.weatheralert.notify.LocationNews
 import com.weatheralert.notify.Notifier
 import com.weatheralert.widget.WeatherWidgetProvider
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
@@ -38,13 +40,21 @@ class WeatherCheckWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
 
-    override suspend fun doWork(): Result {
+    // The scheduled check and the "check now" one have different unique names, so WorkManager
+    // will run both at once. Each reads the "already shown" ledger before the other writes it,
+    // and both would ring for the same alert. One at a time: the second then reuses the first's
+    // fresh forecasts and finds everything already shown.
+    override suspend fun doWork(): Result = runLock.withLock { check() }
+
+    private suspend fun check(): Result {
         val store = AppStore(applicationContext)
         val locations = store.locationsNow()
         if (locations.isEmpty()) return Result.success()
 
         val thresholds = store.settingsNow()
-        val today = LocalDate.now()
+        // The phone's date, for the notification and the ledger. Each place's forecast is judged
+        // by that place's own date (see WatchedLocation.today), which differs only abroad.
+        val today = (locations.map { it.today() } + LocalDate.now()).min()
         var firstError: String? = null
         val news = mutableListOf<LocationNews>()
         // What the app itself fetched moments ago (on open, pull-to-refresh, adding a place) is
@@ -55,19 +65,20 @@ class WeatherCheckWorker(
         // times out gets two more tries within this run instead of waiting for the next one.
         val stillFailing = retryFailed(locations, RETRY_PAUSES_MS) { loc ->
             try {
+                val placeToday = loc.today()
                 val forecast = cached[loc.id]
                     ?.takeIf {
-                        ForecastReuse.canReuse(it, thresholds.horizonDays, today, System.currentTimeMillis())
+                        ForecastReuse.canReuse(it, thresholds.horizonDays, placeToday, System.currentTimeMillis())
                     }
                     ?: OpenMeteo.fetchForecast(loc, thresholds.horizonDays).also { store.saveForecast(it) }
 
-                val alerts = AlertEngine.evaluate(loc, forecast, thresholds, today)
+                val alerts = AlertEngine.evaluate(loc, forecast, thresholds, placeToday)
                 val freshAlerts = store.filterUnseen(alerts)
 
                 // Only BAD advice earns an interruption. CAUTION ("whites may dull", "mask if you
                 // are sensitive") is worth showing in the app but not worth a notification, and
                 // promoting it would roughly triple the volume for very little added value.
-                val advice = AdviceEngine.evaluate(forecast, thresholds, today, alerts)
+                val advice = AdviceEngine.evaluate(forecast, thresholds, placeToday, alerts)
                     .filter { it.level == AdviceLevel.BAD }
                 val freshAdvice = store
                     .filterUnseenKeys(advice.map { adviceKey(loc.id, it) to it.date })
@@ -83,7 +94,7 @@ class WeatherCheckWorker(
                 throw e
             } catch (e: Exception) {
                 firstError = e.message
-                android.util.Log.w(OpenMeteo.TAG, "check failed for ${loc.name}", e)
+                android.util.Log.w(OpenMeteo.TAG, "check failed", e)
                 false
             }
         }
@@ -93,7 +104,7 @@ class WeatherCheckWorker(
         // Marked seen only after posting: a run killed in between re-announces rather than loses.
         // Not marked at all when the post could not be shown (notifications blocked or the
         // channel off): the next check finds it again and announces it once they are back.
-        val delivered = Notifier.notify(applicationContext, news)
+        val delivered = Notifier.notify(applicationContext, news, today)
         if (delivered) {
             for (n in news) {
                 store.recordSeen(n.alerts)
@@ -127,6 +138,8 @@ class WeatherCheckWorker(
     private fun adviceKey(locationId: String, advice: DayAdvice) = "$locationId|${advice.key}"
 
     companion object {
+        private val runLock = Mutex()
+
         const val PERIODIC_NAME = "weather_check_periodic"
         const val ONESHOT_NAME = "weather_check_now"
 

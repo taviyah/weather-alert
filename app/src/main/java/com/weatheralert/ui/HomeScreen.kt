@@ -77,11 +77,11 @@ fun HomeScreen(
     onRefresh: () -> Unit,
     onRemove: (String) -> Unit,
     onFixBattery: () -> Unit,
+    onFixNotifications: () -> Unit,
     onReorder: (List<String>) -> Unit,
     onOpen: (String) -> Unit,
     onHere: () -> Unit,
 ) {
-    val today = LocalDate.now()
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     // Moving and removing places are rare jobs, so their controls stay hidden until "Edit".
     var editing by rememberSaveable { mutableStateOf(false) }
@@ -171,6 +171,19 @@ fun HomeScreen(
             contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (state.showNotificationWarning) {
+                item(key = "banner_notifications") {
+                    WarningBanner(
+                        title = "Notifications are off",
+                        body = "The app keeps checking the forecast, but it cannot tell you about " +
+                            "anything. Alerts found meanwhile are held back and sent once " +
+                            "notifications are on again.",
+                        actionLabel = "Turn on notifications",
+                        onAction = onFixNotifications,
+                    )
+                }
+            }
+
             if (state.showBatteryWarning) {
                 item(key = "banner_battery") {
                     WarningBanner(
@@ -209,7 +222,8 @@ fun HomeScreen(
                     card = card,
                     unit = state.settings.tempUnit,
                     thresholds = state.settings,
-                    today = today,
+                    // Each place's own date: a place abroad can already be on tomorrow.
+                    today = card.location.today(),
                     editing = editing,
                     reorderable = cards.size > 1,
                     dragging = dragging,

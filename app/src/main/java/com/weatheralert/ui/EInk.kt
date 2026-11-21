@@ -1,7 +1,6 @@
 package com.weatheralert.ui
 
 import android.os.Build
-import androidx.compose.foundation.Indication
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.node.DelegatableNode
@@ -47,8 +46,6 @@ val LocalEInk = staticCompositionLocalOf { false }
  * refresh, so a single tap flashes the whole screen and leaves ghosting behind.
  */
 object NoIndication : IndicationNodeFactory {
-    private object NoOpNode : Modifier.Node(), DelegatableNode
-
     override fun create(interactionSource: InteractionSource): DelegatableNode = object : Modifier.Node() {}
 
     override fun equals(other: Any?): Boolean = other === this
@@ -56,5 +53,3 @@ object NoIndication : IndicationNodeFactory {
     override fun hashCode(): Int = -1
 }
 
-@Suppress("DEPRECATION")
-val NoIndicationLegacy: Indication = NoIndication

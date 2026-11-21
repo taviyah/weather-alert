@@ -36,8 +36,9 @@ data class WidgetContent(
     val checked: String,
 ) {
     companion object {
-        private val dayName = DateTimeFormatter.ofPattern("EEEE", Locale.getDefault())
-        private val shortDay = DateTimeFormatter.ofPattern("EEE", Locale.getDefault())
+        // Getters, not stored once, so a change of phone language shows on the next redraw.
+        private val dayName get() = DateTimeFormatter.ofPattern("EEEE", Locale.getDefault())
+        private val shortDay get() = DateTimeFormatter.ofPattern("EEE", Locale.getDefault())
 
         val EMPTY = WidgetContent(
             place = "Weather Alert",
@@ -52,12 +53,14 @@ data class WidgetContent(
 
         suspend fun build(context: Context): WidgetContent {
             val store = AppStore(context)
+            val locations = store.locationsNow()
             return from(
-                locations = store.locationsNow(),
+                locations = locations,
                 forecasts = store.forecastsNow(),
                 settings = store.settingsNow(),
                 lastRunEpochMs = store.lastRunNow().epochMs,
-                today = LocalDate.now(),
+                // The widget leads with the first place, so its date is that place's.
+                today = locations.firstOrNull()?.today() ?: LocalDate.now(),
             )
         }
 

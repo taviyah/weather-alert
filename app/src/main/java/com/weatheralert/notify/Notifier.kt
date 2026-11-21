@@ -1,13 +1,16 @@
 package com.weatheralert.notify
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -51,8 +54,6 @@ object Notifier {
     private const val FLAG_ADVICE = 1
     private const val FLAG_MAJOR = 2
 
-    private val dayFormat = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
-
     private data class Line(val epochDay: Long, val place: String, val text: String, val flags: Int) {
         val advice get() = flags and FLAG_ADVICE != 0
         val major get() = flags and FLAG_MAJOR != 0
@@ -80,9 +81,21 @@ object Notifier {
 
     /** Permission granted and the app's notifications not switched off in system settings. */
     fun canPost(context: Context): Boolean =
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED &&
+        // The permission only exists from Android 13; before that the app-level switch is all.
+        (
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            ) &&
             NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    /** The system page where the user can switch this app's notifications back on. */
+    fun openSettings(context: Context) {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
+    }
 
     /** A channel the user turned off in system settings swallows whatever is posted to it. */
     private fun channelOn(context: Context, channelId: String): Boolean {
@@ -100,8 +113,13 @@ object Notifier {
      * Returns false when [news] could not reach the screen: notifications blocked, the channel
      * turned off, or the post refused. The caller then leaves it out of the "already shown"
      * ledger, so it is announced once notifications work again instead of being lost.
+     *
+     * [today] comes from the caller so a check that runs across midnight judges "past" by the
+     * same day it used to build [news].
      */
-    fun notify(context: Context, news: List<LocationNews>): Boolean {
+    // Lint cannot see that canPost() checks POST_NOTIFICATIONS, and the post is in runCatching.
+    @SuppressLint("MissingPermission")
+    fun notify(context: Context, news: List<LocationNews>, today: LocalDate = LocalDate.now()): Boolean {
         val fresh = news.flatMap { n ->
             val place = n.location.name
             // Advice leads. "Do not hang laundry" is what the user acts on; "PM10 140" is the
@@ -123,7 +141,6 @@ object Notifier {
         if (fresh.isEmpty()) return true
         if (!canPost(context)) return false
 
-        val today = LocalDate.now()
         val mgr = context.getSystemService(NotificationManager::class.java)
         val active = runCatching { mgr?.activeNotifications.orEmpty() }.getOrDefault(emptyArray())
         active.filter { it.notification.group == LEGACY_GROUP }.forEach { mgr?.cancel(it.id) }
@@ -135,8 +152,12 @@ object Notifier {
             .filter { it.epochDay >= today.toEpochDay() }
             .distinctBy { Triple(it.epochDay, it.place, it.text) }
             .sortedWith(compareBy<Line> { it.epochDay }.thenBy { !it.advice }.thenBy { !it.major })
+        // Everything new was for a day already gone: nothing to show, and nothing lost.
+        if (lines.isEmpty()) return true
         val places = lines.map { it.place }.distinct()
 
+        // Built per call, not stored once, so a change of phone language shows up straight away.
+        val dayFormat = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
         fun whenText(epochDay: Long) = when (val date = LocalDate.ofEpochDay(epochDay)) {
             today -> "Today"
             today.plusDays(1) -> "Tomorrow"

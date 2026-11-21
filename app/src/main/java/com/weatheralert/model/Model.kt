@@ -2,6 +2,8 @@ package com.weatheralert.model
 
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
+import java.time.ZoneId
+import kotlin.math.roundToInt
 
 /** A place the user watches. [id] is stable across renames so the alert ledger keeps working. */
 @Serializable
@@ -15,6 +17,14 @@ data class WatchedLocation(
     val timezone: String? = null,
 ) {
     val subtitle: String get() = listOfNotNull(admin, country).joinToString(", ")
+
+    /**
+     * Today's date where the place is. Forecast days come back in the place's own time zone
+     * (`timezone=auto`), so near midnight on a trip abroad the phone's date would be the wrong
+     * day. Falls back to the phone's zone when the place's zone is unknown.
+     */
+    fun today(): LocalDate =
+        timezone?.let { runCatching { LocalDate.now(ZoneId.of(it)) }.getOrNull() } ?: LocalDate.now()
 
     companion object {
         /** Coordinates rounded to ~1 km: re-adding the same town twice must not duplicate it. */
@@ -193,7 +203,17 @@ data class DayAdvice(
 
 enum class AqiScale { EUROPEAN, US }
 
-enum class TempUnit { CELSIUS, FAHRENHEIT }
+enum class TempUnit {
+    CELSIUS, FAHRENHEIT;
+
+    /** A temperature stored in Celsius, as text in this unit: "-4°". */
+    fun temp(celsius: Double): String =
+        "${(if (this == FAHRENHEIT) celsius * 9.0 / 5.0 + 32.0 else celsius).roundToInt()}°"
+
+    /** A temperature *difference* stored in Celsius, in this unit: no +32 offset. */
+    fun delta(celsius: Double): String =
+        "${(if (this == FAHRENHEIT) celsius * 9.0 / 5.0 else celsius).roundToInt()}°"
+}
 
 /**
  * Every number the alert engine consults. Temperatures are always stored in Celsius; [tempUnit]

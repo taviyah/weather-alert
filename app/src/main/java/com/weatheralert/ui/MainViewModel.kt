@@ -17,9 +17,12 @@ import com.weatheralert.model.LocationForecast
 import com.weatheralert.model.Thresholds
 import com.weatheralert.model.WatchedLocation
 import com.weatheralert.model.WeatherAlert
+import com.weatheralert.notify.Notifier
 import com.weatheralert.widget.WeatherWidgetProvider
 import com.weatheralert.work.KeepAliveService
 import com.weatheralert.work.Scheduler
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +31,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 data class LocationCard(
     val location: WatchedLocation,
@@ -46,12 +48,19 @@ data class HomeState(
     val lastRun: LastRun = LastRun(),
     val loaded: Boolean = false,
     val batteryExempt: Boolean = true,
+    /** Permission granted and not switched off in system settings. */
+    val notificationsOn: Boolean = true,
     val stalled: Boolean = false,
     val hoursSinceLastRun: Long = 0,
 ) {
     /** Only worth nagging about once there is something to miss. */
     val showBatteryWarning: Boolean get() = !batteryExempt && cards.isNotEmpty()
+
+    val showNotificationWarning: Boolean get() = !notificationsOn && cards.isNotEmpty()
 }
+
+/** What a location-permission prompt was opened for, so its answer can be acted on. */
+enum class LocationUse { HERE, ADD }
 
 data class HereState(
     val locating: Boolean = false,
@@ -84,10 +93,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             store.lastRun,
             healthTick,
         ) { locations, forecasts, settings, lastRun, _ ->
-            val today = LocalDate.now()
             val app = getApplication<Application>()
             HomeState(
                 cards = locations.map { loc ->
+                    val today = loc.today()
                     val fc = forecasts[loc.id]
                     val alerts = fc?.let { AlertEngine.evaluate(loc, it, settings, today) }.orEmpty()
                     LocationCard(
@@ -101,6 +110,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 lastRun = lastRun,
                 loaded = true,
                 batteryExempt = BackgroundHealth.isExemptFromBatteryOptimisation(app),
+                notificationsOn = Notifier.canPost(app),
                 stalled = BackgroundHealth.isStalled(lastRun.epochMs, settings.checkEveryHours),
                 hoursSinceLastRun = BackgroundHealth.hoursSince(lastRun.epochMs),
             )
@@ -137,10 +147,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 var attempted = 0
                 val locations = store.locationsNow()
                 val cached = if (force) emptyMap() else store.forecastsNow()
-                val today = LocalDate.now()
                 for (loc in locations) {
                     val reuse = ForecastReuse.canReuse(
-                        cached[loc.id], settings.horizonDays, today, System.currentTimeMillis(),
+                        cached[loc.id], settings.horizonDays, loc.today(), System.currentTimeMillis(),
                     )
                     if (reuse) continue
                     attempted++
@@ -149,7 +158,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         .onFailure {
                             failures++
                             if (firstError == null) firstError = it.message
-                            android.util.Log.w(OpenMeteo.TAG, "refresh failed for ${loc.name}", it)
+                            android.util.Log.w(OpenMeteo.TAG, "refresh failed", it)
                         }
                 }
                 // Recording a clean run after a total failure made a broken app look healthy.
@@ -177,16 +186,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private var searchJob: Job? = null
+
+    /**
+     * Each keystroke (after the debounce) replaces the search before it. Without the cancel, a
+     * slow answer for "Haif" could land after the one for "Haifa" and replace it.
+     */
     fun search(query: String) {
-        viewModelScope.launch {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             _searching.value = true
             _searchError.value = null
-            runCatching { Geocoding.search(query) }
-                .onSuccess { _searchResults.value = it }
-                .onFailure {
-                    _searchResults.value = emptyList()
-                    _searchError.value = it.message ?: "Search failed"
-                }
+            try {
+                val found = Geocoding.search(query)
+                _searchResults.value = found
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _searchResults.value = emptyList()
+                _searchError.value = e.message ?: "Search failed"
+            }
             _searching.value = false
         }
     }
@@ -194,6 +213,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun clearSearch() {
         _searchResults.value = emptyList()
         _searchError.value = null
+        _addedFromLocation.value = false
     }
 
     fun addLocation(loc: WatchedLocation) {
@@ -204,7 +224,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { OpenMeteo.fetchForecast(loc, store.settingsNow().horizonDays) }
                 .onSuccess { store.saveForecast(it) }
                 .onFailure {
-                    android.util.Log.w(OpenMeteo.TAG, "first fetch failed for ${loc.name}", it)
+                    android.util.Log.w(OpenMeteo.TAG, "first fetch failed", it)
                     store.saveLastRun(
                         LastRun(System.currentTimeMillis(), "Could not load ${loc.name}: ${it.message}"),
                     )
@@ -252,7 +272,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val locateError: StateFlow<String?> = _locateError.asStateFlow()
 
     /** "Use my location": one coarse fix, reverse-geocoded to a name, added like any other place. */
-    fun addCurrentLocation(onAdded: () -> Unit) {
+    private val _addedFromLocation = MutableStateFlow(false)
+
+    /** True once "Use my location" has added a place; the add screen closes and clears it. */
+    val addedFromLocation: StateFlow<Boolean> = _addedFromLocation.asStateFlow()
+
+    fun consumeAddedFromLocation() { _addedFromLocation.value = false }
+
+    fun addCurrentLocation() {
         if (_locating.value) return
         viewModelScope.launch {
             _locating.value = true
@@ -260,7 +287,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { DeviceLocation.current(getApplication()) }
                 .onSuccess { loc ->
                     addLocation(loc)
-                    onAdded()
+                    _addedFromLocation.value = true
                 }
                 .onFailure { _locateError.value = it.message ?: "Could not get your location" }
             _locating.value = false
@@ -268,6 +295,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearLocateError() { _locateError.value = null }
+
+    /**
+     * Kept here, not in the Activity, because the Activity is rebuilt if the phone rotates while
+     * the permission prompt is open, and the answer would then reach nobody.
+     */
+    private var pendingLocationUse: LocationUse? = null
+
+    fun expectLocationPermission(use: LocationUse) { pendingLocationUse = use }
+
+    /** [use] is given when permission was already held; otherwise the pending one is used. */
+    fun locationPermissionResult(use: LocationUse?, granted: Boolean) {
+        val target = use ?: pendingLocationUse ?: return
+        pendingLocationUse = null
+        when (target) {
+            LocationUse.HERE -> if (granted) showHere() else hereDenied()
+            LocationUse.ADD -> if (granted) addCurrentLocation()
+        }
+    }
+
+    fun openNotificationSettings() = Notifier.openSettings(getApplication())
 
     // ------------------------------------------------------------- "where I am"
 
@@ -285,11 +332,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     val here: StateFlow<HereState> =
         combine(_here, _hereLocating, _hereError, store.settings) { here, locating, error, settings ->
-            val today = LocalDate.now()
             HereState(
                 locating = locating,
                 error = error,
                 card = here?.let { h ->
+                    val today = h.location.today()
                     val alerts = AlertEngine.evaluate(h.location, h.forecast, settings, today)
                     LocationCard(
                         location = h.location,

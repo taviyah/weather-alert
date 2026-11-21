@@ -282,6 +282,14 @@ Two things keep this from becoming spam:
 Settings has a **Re-send current alerts** button that clears the ledger, for when you dismissed
 something and want it back.
 
+An alert only enters the ledger once it has actually been posted. While notifications are blocked
+(permission refused, switched off in system settings, or the alert's channel turned off), alerts
+are held back and announced once notifications work again, and the home screen shows a
+**Notifications are off** banner with a button to the system page. The scheduled check and a
+"check now" never run at the same time, so one alert cannot ring twice. Temperatures in the
+notification and the widget follow the °C/°F setting, and "today" is each place's own date, which
+only matters for a place in another time zone.
+
 ---
 
 ## Layout

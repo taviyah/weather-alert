@@ -219,13 +219,13 @@ object AdviceEngine {
                 AdviceLevel.BAD,
                 if (worst < 0) "Dress much warmer" else "Dress much lighter",
             )
-            reasons += "feels ${mag.roundToInt()}° ${if (worst < 0) "colder" else "warmer"} than yesterday"
+            reasons += "feels ${t.tempUnit.delta(mag)} ${if (worst < 0) "colder" else "warmer"} than yesterday"
         } else if (mag >= notable) {
             raise(
                 AdviceLevel.CAUTION,
                 if (worst < 0) "Dress warmer" else "Dress lighter",
             )
-            reasons += "feels ${mag.roundToInt()}° ${if (worst < 0) "colder" else "warmer"} than yesterday"
+            reasons += "feels ${t.tempUnit.delta(mag)} ${if (worst < 0) "colder" else "warmer"} than yesterday"
         }
 
         if (day.precipMm >= 0.2 && day.precipProbPct >= t.clothingRainProbPct) {
@@ -240,11 +240,11 @@ object AdviceEngine {
 
         if (day.apparentMin <= t.clothingColdEveningC && day.apparentMax >= 20.0) {
             raise(AdviceLevel.CAUTION, "Layer for the evening")
-            reasons += "drops to ${day.apparentMin.roundToInt()}° after dark"
+            reasons += "drops to ${t.tempUnit.temp(day.apparentMin)} after dark"
         }
 
         if (level == AdviceLevel.GOOD) {
-            reasons += "feels ${day.apparentMin.roundToInt()}° to ${day.apparentMax.roundToInt()}°"
+            reasons += "feels ${t.tempUnit.temp(day.apparentMin)} to ${t.tempUnit.temp(day.apparentMax)}"
         }
 
         return DayAdvice(day.date, AdviceKind.CLOTHING, level, headline, reasons.joinToString(", "))

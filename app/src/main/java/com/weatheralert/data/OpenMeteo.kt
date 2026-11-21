@@ -125,6 +125,9 @@ object OpenMeteo {
 
     const val TAG = "WeatherAlert"
 
+    /** Sent to every weather and place-search service. The project page is how to reach us. */
+    const val USER_AGENT = "WeatherAlert/0.1 (+https://github.com/taviyah/weather-alert)"
+
     const val RAIN_MODEL = "ecmwf_ifs"
 
     /** Per value, so a day or hour ECMWF has no number for keeps best_match's instead of zero. */
@@ -152,21 +155,24 @@ object OpenMeteo {
         }
     }
 
+    private fun hostOf(url: String) = runCatching { java.net.URI(url).host }.getOrNull() ?: "?"
+
     private fun get(url: String): String {
-        val req = Request.Builder().url(url).header("User-Agent", "WeatherAlert/0.1").build()
+        val req = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
         return try {
             http.newCall(req).execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) throw ApiException("HTTP ${resp.code}: ${body.take(200)}")
-                Log.d(TAG, "GET ok (${body.length} bytes) $url")
                 body
             }
         } catch (e: ApiException) {
-            Log.w(TAG, "GET failed: ${e.message} — $url")
+            // The host only: the full URL holds the watched place's coordinates, and logs end up
+            // in bug reports.
+            Log.w(TAG, "GET failed: ${e.message} — ${hostOf(url)}")
             throw e
         } catch (e: Exception) {
             // Without this the app fails silently and neither the user nor a log can say why.
-            Log.w(TAG, "GET failed: ${e.javaClass.simpleName}: ${e.message} — $url")
+            Log.w(TAG, "GET failed: ${e.javaClass.simpleName}: ${e.message} — ${hostOf(url)}")
             throw ApiException("${e.javaClass.simpleName}: ${e.message}", e)
         }
     }

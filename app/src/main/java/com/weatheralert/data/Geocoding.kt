@@ -56,10 +56,10 @@ object Geocoding {
             val url = "$NOMINATIM?q=${URLEncoder.encode(query, "UTF-8")}" +
                 "&format=jsonv2&addressdetails=1&accept-language=he&limit=10"
             // Nominatim's usage policy requires an identifying User-Agent and rejects requests
-            // without one.
+            // without one. The project page is the contact; no personal address is needed.
             val req = Request.Builder()
                 .url(url)
-                .header("User-Agent", "WeatherAlert/0.1 (personal weather alerting app)")
+                .header("User-Agent", OpenMeteo.USER_AGENT)
                 .build()
 
             val body = try {

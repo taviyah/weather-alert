@@ -30,6 +30,8 @@
          about 11 km wide, so a finer fix would buy nothing. The app is fully usable without it. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Backup is on deliberately: the watched places and settings then follow the user to a
+         new phone through their own Google backup. Nothing else is stored. -->
     <application
         android:name=".WeatherAlertApp"
         android:allowBackup="true"
