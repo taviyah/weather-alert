@@ -303,6 +303,16 @@ data class Thresholds(
     val eInkMode: Boolean = false,
     val eInkDefaultApplied: Boolean = false,
 
+    /**
+     * Run [com.weatheralert.work.KeepAliveService], the always-on "Watching the forecast"
+     * service. Only phones whose maker kills background apps (DuraSpeed on MediaTek builds, such
+     * as the Bigme HiBreak) need it; elsewhere it only keeps the app in memory for nothing.
+     * Defaulted once from [com.weatheralert.work.KeepAliveService.likelyNeeded] on first launch,
+     * then left to the user, like [eInkMode].
+     */
+    val keepAlive: Boolean = false,
+    val keepAliveDefaultApplied: Boolean = false,
+
     // ---------------------------------------------------------------- advice signals
 
     /**

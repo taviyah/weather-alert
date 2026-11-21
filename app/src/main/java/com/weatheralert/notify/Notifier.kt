@@ -78,17 +78,30 @@ object Notifier {
         )
     }
 
+    /** Permission granted and the app's notifications not switched off in system settings. */
     fun canPost(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
+            PackageManager.PERMISSION_GRANTED &&
+            NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    /** A channel the user turned off in system settings swallows whatever is posted to it. */
+    private fun channelOn(context: Context, channelId: String): Boolean {
+        val mgr = context.getSystemService(NotificationManager::class.java) ?: return false
+        val channel = mgr.getNotificationChannel(channelId) ?: return true
+        return channel.importance != NotificationManager.IMPORTANCE_NONE
+    }
 
     /**
      * One notification for everything, not one per alert or per place. A single incoming front
      * can trip rain, wind-blown dust and a temperature drop across three days and two places at
      * once; a stack of notifications for one weather system would train the user to swipe them
      * away. Anything still on screen from an earlier check is kept and merged in.
+     *
+     * Returns false when [news] could not reach the screen: notifications blocked, the channel
+     * turned off, or the post refused. The caller then leaves it out of the "already shown"
+     * ledger, so it is announced once notifications work again instead of being lost.
      */
-    fun notify(context: Context, news: List<LocationNews>) {
+    fun notify(context: Context, news: List<LocationNews>): Boolean {
         val fresh = news.flatMap { n ->
             val place = n.location.name
             // Advice leads. "Do not hang laundry" is what the user acts on; "PM10 140" is the
@@ -107,7 +120,8 @@ object Notifier {
                 )
             }
         }
-        if (fresh.isEmpty() || !canPost(context)) return
+        if (fresh.isEmpty()) return true
+        if (!canPost(context)) return false
 
         val today = LocalDate.now()
         val mgr = context.getSystemService(NotificationManager::class.java)
@@ -159,10 +173,9 @@ object Notifier {
         // The channel follows what is new, so a fresh Notable line does not re-ring with the
         // Major sound of something the user has already been told about.
         val major = fresh.any { it.major }
-        val notification = NotificationCompat.Builder(
-            context,
-            if (major) CHANNEL_MAJOR else CHANNEL_NOTABLE,
-        )
+        val channelId = if (major) CHANNEL_MAJOR else CHANNEL_NOTABLE
+        if (!channelOn(context, channelId)) return false
+        val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_alert)
             .setContentTitle(title)
             .setContentText(rendered.first())
@@ -175,7 +188,8 @@ object Notifier {
             .addExtras(writeLines(lines))
             .build()
 
-        runCatching { NotificationManagerCompat.from(context).notify(ALERTS_ID, notification) }
+        return runCatching { NotificationManagerCompat.from(context).notify(ALERTS_ID, notification) }
+            .isSuccess
     }
 
     private fun adviceIcon(kind: AdviceKind) = when (kind) {

@@ -49,7 +49,8 @@ object AdviceEngine {
             val date = day.localDate
             if (date.isBefore(today) || date.isAfter(lastDay)) return@forEachIndexed
             val air = forecast.airFor(date)
-            val prev = days.getOrNull(i - 1)
+            // Only the calendar day before counts as "yesterday" (see AlertEngine).
+            val prev = days.getOrNull(i - 1)?.takeIf { it.localDate == date.minusDays(1) }
 
             if (t.enableLaundry) out += laundry(day, air, t)
             if (t.enableMask) out += mask(day, air, t)

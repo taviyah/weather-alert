@@ -12,6 +12,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.weatheralert.data.AppStore
+import com.weatheralert.data.ForecastReuse
 import com.weatheralert.data.LastRun
 import com.weatheralert.data.OpenMeteo
 import com.weatheralert.domain.AdviceEngine
@@ -46,13 +47,19 @@ class WeatherCheckWorker(
         val today = LocalDate.now()
         var firstError: String? = null
         val news = mutableListOf<LocationNews>()
+        // What the app itself fetched moments ago (on open, pull-to-refresh, adding a place) is
+        // used as it is rather than downloaded a second time.
+        val cached = store.forecastsNow()
 
         // One unreachable location must not stop the others from being checked, and one that
         // times out gets two more tries within this run instead of waiting for the next one.
         val stillFailing = retryFailed(locations, RETRY_PAUSES_MS) { loc ->
             try {
-                val forecast = OpenMeteo.fetchForecast(loc, thresholds.horizonDays)
-                store.saveForecast(forecast)
+                val forecast = cached[loc.id]
+                    ?.takeIf {
+                        ForecastReuse.canReuse(it, thresholds.horizonDays, today, System.currentTimeMillis())
+                    }
+                    ?: OpenMeteo.fetchForecast(loc, thresholds.horizonDays).also { store.saveForecast(it) }
 
                 val alerts = AlertEngine.evaluate(loc, forecast, thresholds, today)
                 val freshAlerts = store.filterUnseen(alerts)
@@ -84,10 +91,14 @@ class WeatherCheckWorker(
 
         // Every place is told about in one notification, so it goes out once all are checked.
         // Marked seen only after posting: a run killed in between re-announces rather than loses.
-        Notifier.notify(applicationContext, news)
-        for (n in news) {
-            store.recordSeen(n.alerts)
-            store.recordSeenKeys(n.advice.map { adviceKey(n.location.id, it) to it.date })
+        // Not marked at all when the post could not be shown (notifications blocked or the
+        // channel off): the next check finds it again and announces it once they are back.
+        val delivered = Notifier.notify(applicationContext, news)
+        if (delivered) {
+            for (n in news) {
+                store.recordSeen(n.alerts)
+                store.recordSeenKeys(n.advice.map { adviceKey(n.location.id, it) to it.date })
+            }
         }
 
         store.pruneLedger(today)

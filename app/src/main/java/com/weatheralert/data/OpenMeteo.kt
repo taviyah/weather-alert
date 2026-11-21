@@ -191,6 +191,10 @@ object OpenMeteo {
         }
     }
 
+    /** The daily part of a forecast response, decoded exactly as [fetchForecast] does. For tests. */
+    internal fun parseDays(body: String): List<DayWeather> =
+        json.decodeFromString<ForecastDto>(body).toDays()
+
     // ---------------------------------------------------------------- DTOs
 
     @Serializable
@@ -209,21 +213,29 @@ object OpenMeteo {
 
         fun toDays(): List<DayWeather> {
             val d = daily ?: return emptyList()
-            return d.time.indices.map { i ->
+            return d.time.indices.mapNotNull { i ->
+                // A day with no temperature or gust figure is dropped, not filled with zeros. A
+                // zero would read as a real 0 °C and fire a false "Frost" and "Sharp temperature
+                // drop", or a gust swing to 0 km/h. The alert rules only compare a day with the
+                // calendar day right before it, so a dropped day silences its neighbours' change
+                // rules instead of comparing across the gap.
+                val tempMax = d.tempMax?.getOrNull(i) ?: return@mapNotNull null
+                val tempMin = d.tempMin?.getOrNull(i) ?: return@mapNotNull null
+                val gustMax = d.gustMax?.getOrNull(i) ?: return@mapNotNull null
                 DayWeather(
                     date = d.time[i],
                     weatherCode = d.weatherCode?.getOrNull(i) ?: 0,
-                    tempMax = d.tempMax?.getOrNull(i) ?: 0.0,
-                    tempMin = d.tempMin?.getOrNull(i) ?: 0.0,
+                    tempMax = tempMax,
+                    tempMin = tempMin,
                     // Apparent temperature is occasionally null at the edge of a model run;
                     // falling back to the real temperature makes the feels-like rule a no-op
                     // for that day rather than throwing the whole location away.
-                    apparentMax = d.apparentMax?.getOrNull(i) ?: d.tempMax?.getOrNull(i) ?: 0.0,
-                    apparentMin = d.apparentMin?.getOrNull(i) ?: d.tempMin?.getOrNull(i) ?: 0.0,
+                    apparentMax = d.apparentMax?.getOrNull(i) ?: tempMax,
+                    apparentMin = d.apparentMin?.getOrNull(i) ?: tempMin,
                     precipMm = d.precipSum?.getOrNull(i) ?: 0.0,
                     precipProbPct = d.precipProbMax?.getOrNull(i) ?: 0,
                     windMaxKmh = d.windMax?.getOrNull(i) ?: 0.0,
-                    gustMaxKmh = d.gustMax?.getOrNull(i) ?: 0.0,
+                    gustMaxKmh = gustMax,
                     humidityMeanPct = d.humidityMean?.getOrNull(i),
                     humidityMinPct = d.humidityMin?.getOrNull(i),
                     humidityMaxPct = d.humidityMax?.getOrNull(i),

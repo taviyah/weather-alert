@@ -19,3 +19,6 @@ local.properties
 # Notes for AI coding tools (kept private)
 AGENTS.md
 CLAUDE.md
+
+# Local-only backups
+_backup-*/

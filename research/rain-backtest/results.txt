@@ -1,0 +1,84 @@
+gauges scored: Bet Dagan (Tel Aviv area), Mount Kenaan (Galilee), Beer Sheva, Ben Gurion
+Gauge day alignment (correlation of gauge totals with mean of all models, lead 1):
+  Bet Dagan (Tel Aviv area)    -18h r=0.60  -12h r=0.72  -6h r=0.77  +0h r=0.71  +6h r=0.57   -> use -6h
+  Mount Kenaan (Galilee)       -18h r=0.53  -12h r=0.72  -6h r=0.76  +0h r=0.70  +6h r=0.60   -> use -6h
+  Beer Sheva                   -18h r=0.66  -12h r=0.73  -6h r=0.77  +0h r=0.76  +6h r=0.54   -> use -6h
+  Ben Gurion                   -18h r=0.70  -12h r=0.77  -6h r=0.72  +0h r=0.67  +6h r=0.53   -> use -12h
+
+A. All 9 models, 2025-26 season (Oct 2025 - Feb 2026), forecast made ~1 day ahead
+  417 station-days, 84 observed wet (>= 1.0 mm), 32 heavy (>= 10.0 mm)
+  model                        CSI  hit% false% heavy hit% heavy false% MAE wet mm amount bias
+  ECMWF IFS 9 km              0.79    93     16         75           11        3.3        1.06
+  ECMWF IFS 0.25              0.76    90     17         78           11        3.8        1.21
+  multi-model median          0.72    81     14         72            8        3.5        0.77
+  DWD ICON global             0.70    76     11         72           18        4.2        0.81
+  ECMWF AIFS (AI)             0.68    95     30         81           19        3.6        1.06
+  Meteo-France ARPEGE         0.68    77     16         72           15        4.6        0.89
+  UK Met Office 10 km         0.66    80     20         59           10        4.5        0.76
+  NOAA GFS                    0.63    79     23         53           15        5.1        0.69
+  app today (best_match)      0.59    62      7         41           19        5.5        0.57
+  DWD ICON-EU                 0.59    62      7         41           19        5.5        0.57
+  Brier (lower is better): multi-model agreement 0.043, climatology 0.161, app today (best_match) yes/no 0.086, ECMWF IFS 9 km yes/no 0.050, ECMWF IFS 0.25 yes/no 0.058
+  Reliability of multi-model agreement (share of models saying wet -> how often it rained):
+    ~  0% of models wet: rained on   1% of 310 days
+    ~ 25% of models wet: rained on  37% of 19 days
+    ~ 50% of models wet: rained on  53% of 15 days
+    ~ 75% of models wet: rained on  70% of 20 days
+    ~100% of models wet: rained on  96% of 53 days
+
+B. All 9 models, 2025-26 season, ~2 days ahead
+  414 station-days, 84 observed wet (>= 1.0 mm), 32 heavy (>= 10.0 mm)
+  model                        CSI  hit% false% heavy hit% heavy false% MAE wet mm amount bias
+  ECMWF IFS 9 km              0.78    95     18         94           23        3.5        1.07
+  ECMWF IFS 0.25              0.76    90     17         88           15        4.2        1.22
+  multi-model median          0.70    79     13         62            9        4.0        0.71
+  DWD ICON global             0.67    74     13         56           18        5.2        0.78
+  ECMWF AIFS (AI)             0.62    93     34         78           22        3.6        1.04
+  UK Met Office 10 km         0.62    79     26         62           26        5.0        0.86
+  app today (best_match)      0.59    64     13         38           14        6.0        0.56
+  DWD ICON-EU                 0.59    64     13         38           14        6.0        0.56
+  NOAA GFS                    0.58    70     22         50           16        5.2        0.66
+  Meteo-France ARPEGE         0.55    65     23         66           12        4.7        0.79
+  Brier (lower is better): multi-model agreement 0.049, climatology 0.162, app today (best_match) yes/no 0.092, ECMWF IFS 9 km yes/no 0.053, ECMWF IFS 0.25 yes/no 0.058
+  Reliability of multi-model agreement (share of models saying wet -> how often it rained):
+    ~  0% of models wet: rained on   1% of 295 days
+    ~ 25% of models wet: rained on  29% of 34 days
+    ~ 50% of models wet: rained on  72% of 18 days
+    ~ 75% of models wet: rained on  83% of 12 days
+    ~100% of models wet: rained on  89% of 55 days
+
+C. Six long-archive models, Jan 2024 - Feb 2026 (2.3 seasons), ~1 day ahead
+  1561 station-days, 288 observed wet (>= 1.0 mm), 71 heavy (>= 10.0 mm)
+  model                        CSI  hit% false% heavy hit% heavy false% MAE wet mm amount bias
+  ECMWF IFS 0.25              0.54    74     33         55           39        4.4        1.11
+  Meteo-France ARPEGE         0.51    67     31         48           28        4.4        0.79
+  multi-model median          0.50    61     28         42           23        4.2        0.67
+  DWD ICON global             0.46    55     25         44           30        4.6        0.62
+  NOAA GFS                    0.46    62     36         44           28        4.4        0.72
+  app today (best_match)      0.43    50     23         25           31        5.0        0.48
+  DWD ICON-EU                 0.43    50     23         25           31        5.0        0.48
+  Brier (lower is better): multi-model agreement 0.090, climatology 0.150, app today (best_match) yes/no 0.120, ECMWF IFS 0.25 yes/no 0.116
+  Reliability of multi-model agreement (share of models saying wet -> how often it rained):
+    ~  0% of models wet: rained on   4% of 1153 days
+    ~ 25% of models wet: rained on  41% of 165 days
+    ~ 50% of models wet: rained on  49% of 45 days
+    ~ 75% of models wet: rained on  65% of 55 days
+    ~100% of models wet: rained on  83% of 143 days
+
+D. Six long-archive models, Jan 2024 - Feb 2026, ~2 days ahead
+  1557 station-days, 285 observed wet (>= 1.0 mm), 69 heavy (>= 10.0 mm)
+  model                        CSI  hit% false% heavy hit% heavy false% MAE wet mm amount bias
+  ECMWF IFS 0.25              0.53    73     34         61           32        4.3        1.05
+  multi-model median          0.48    60     30         41           18        4.4        0.61
+  Meteo-France ARPEGE         0.47    62     34         42           41        4.9        0.82
+  NOAA GFS                    0.44    58     36         41           35        4.6        0.73
+  DWD ICON global             0.41    50     30         35           25        4.8        0.58
+  app today (best_match)      0.39    47     29         23           20        5.1        0.46
+  DWD ICON-EU                 0.39    47     29         23           20        5.1        0.46
+  Brier (lower is better): multi-model agreement 0.096, climatology 0.150, app today (best_match) yes/no 0.133, ECMWF IFS 0.25 yes/no 0.118
+  Reliability of multi-model agreement (share of models saying wet -> how often it rained):
+    ~  0% of models wet: rained on   4% of 1148 days
+    ~ 25% of models wet: rained on  40% of 167 days
+    ~ 50% of models wet: rained on  57% of 54 days
+    ~ 75% of models wet: rained on  67% of 63 days
+    ~100% of models wet: rained on  78% of 125 days

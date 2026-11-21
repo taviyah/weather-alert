@@ -111,6 +111,17 @@ fun SettingsScreen(
                             "later changes nothing. 6h is the default; 1h mostly re-reads the " +
                             "same numbers at twice the battery cost.",
                     )
+                    Spacer(Modifier.height(8.dp))
+                    ToggleRow("Keep checks alive (permanent notification)", settings.keepAlive) {
+                        onChange(settings.copy(keepAlive = it, keepAliveDefaultApplied = true))
+                    }
+                    Note(
+                        "Some phones, MediaTek ones such as the Bigme HiBreak in particular, shut " +
+                            "the app down minutes after you leave it, and no alert arrives until " +
+                            "you open it again. This keeps a silent \"Watching the forecast\" " +
+                            "notification running to stop that. Turned on automatically on such " +
+                            "phones; elsewhere it only uses memory. Your choice here always wins.",
+                    )
                 }
             }
 

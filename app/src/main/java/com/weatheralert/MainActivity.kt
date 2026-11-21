@@ -8,7 +8,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -73,7 +72,8 @@ class MainActivity : ComponentActivity() {
                 val locateError by vm.locateError.collectAsStateWithLifecycle()
                 val nav = rememberNavController()
 
-                LaunchedEffect(Unit) { vm.refresh() }
+                // The refresh on opening the app lives in MainViewModel's init, which survives a
+                // rotation. Here it re-ran every time the screen was rebuilt.
 
                 // The battery exemption is granted in a system screen, so the only way to notice
                 // it happened is to re-check when the user comes back.
@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
                             refreshing = refreshing,
                             onAdd = { vm.clearSearch(); nav.navigate("add") },
                             onSettings = { nav.navigate("settings") },
-                            onRefresh = vm::refresh,
+                            onRefresh = { vm.refresh(force = true) },
                             onRemove = vm::removeLocation,
                             onFixBattery = vm::requestBatteryExemption,
                             onReorder = vm::reorderLocations,

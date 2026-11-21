@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.weatheralert.WeatherAlertApp
 import com.weatheralert.data.BackgroundHealth
 import com.weatheralert.data.DeviceLocation
+import com.weatheralert.data.ForecastReuse
 import com.weatheralert.data.Geocoding
 import com.weatheralert.data.LastRun
 import com.weatheralert.data.OpenMeteo
@@ -17,6 +18,7 @@ import com.weatheralert.model.Thresholds
 import com.weatheralert.model.WatchedLocation
 import com.weatheralert.model.WeatherAlert
 import com.weatheralert.widget.WeatherWidgetProvider
+import com.weatheralert.work.KeepAliveService
 import com.weatheralert.work.Scheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -116,7 +118,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _searchError = MutableStateFlow<String?>(null)
     val searchError: StateFlow<String?> = _searchError.asStateFlow()
 
-    fun refresh() {
+    /**
+     * Fetches every place for the screen, then starts the background check, which reuses these
+     * fresh forecasts instead of downloading them again (see [ForecastReuse]).
+     *
+     * [force] is for pull-to-refresh: the user asked, so every place is downloaded. Otherwise a
+     * place fetched in the last few minutes is left as it is, so reopening the app right after
+     * closing it costs nothing.
+     */
+    fun refresh(force: Boolean = false) {
         if (_refreshing.value) return
         viewModelScope.launch {
             _refreshing.value = true
@@ -124,8 +134,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val settings = store.settingsNow()
                 var firstError: String? = null
                 var failures = 0
+                var attempted = 0
                 val locations = store.locationsNow()
+                val cached = if (force) emptyMap() else store.forecastsNow()
+                val today = LocalDate.now()
                 for (loc in locations) {
+                    val reuse = ForecastReuse.canReuse(
+                        cached[loc.id], settings.horizonDays, today, System.currentTimeMillis(),
+                    )
+                    if (reuse) continue
+                    attempted++
                     runCatching { OpenMeteo.fetchForecast(loc, settings.horizonDays) }
                         .onSuccess { store.saveForecast(it) }
                         .onFailure {
@@ -135,17 +153,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         }
                 }
                 // Recording a clean run after a total failure made a broken app look healthy.
-                store.saveLastRun(
-                    LastRun(
-                        epochMs = System.currentTimeMillis(),
-                        error = if (failures > 0) {
-                            "$failures of ${locations.size} failed" +
-                                (firstError?.let { ": $it" } ?: "")
-                        } else {
-                            null
-                        },
-                    ),
-                )
+                // Nothing fetched (every place reused) means nothing new to record.
+                if (attempted > 0) {
+                    store.saveLastRun(
+                        LastRun(
+                            epochMs = System.currentTimeMillis(),
+                            error = if (failures > 0) {
+                                "$failures of $attempted failed" +
+                                    (firstError?.let { ": $it" } ?: "")
+                            } else {
+                                null
+                            },
+                        ),
+                    )
+                }
             } finally {
                 _refreshing.value = false
             }
@@ -213,6 +234,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             store.saveSettings(t)
             if (previous.checkEveryHours != t.checkEveryHours) {
                 Scheduler.schedulePeriodic(getApplication(), t.checkEveryHours)
+            }
+            if (previous.keepAlive != t.keepAlive) {
+                KeepAliveService.sync(getApplication(), t.keepAlive)
             }
             // A widened horizon needs more days than the cache holds, so refetch rather than
             // showing a short forecast until the next scheduled run.
@@ -319,5 +343,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             store.clearLedger()
             Scheduler.runNow(getApplication())
         }
+    }
+
+    // Kept last so every field above is initialised before it runs. The ViewModel outlives a
+    // screen rotation, so this runs once per visit to the app; when it sat in the Compose tree
+    // it ran again on every rotation and every dark-mode switch.
+    init {
+        refresh()
     }
 }

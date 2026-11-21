@@ -491,6 +491,12 @@ good by turning off the "Background checks" category (long-press it). Verified o
 with the channel at importance 0 the service stays foreground at oom_adj 200, which is all
 DuraSpeed looks at. The alert channels are separate and unaffected.
 
+The service only runs where it is needed. **Settings > General > "Keep checks alive"** switches
+it, and on first launch it defaults to on only when the phone looks like a DuraSpeed candidate: a
+DuraSpeed framework file, a MediaTek chip, or an e-paper brand (the HiBreak matches all three).
+Elsewhere it would only hold the app in memory for nothing. If Android refuses the foreground
+start, the service stops quietly instead of crashing the app, and the next process start retries.
+
 ---
 
 ## E Ink support

@@ -15,6 +15,14 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.weatheralert.MainActivity
 import com.weatheralert.R
+import com.weatheralert.data.AppStore
+import com.weatheralert.ui.EInkDetect
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.io.File
+import java.util.Locale
 
 /**
  * A foreground service that does nothing except keep the process in the foreground-service state.
@@ -63,10 +71,20 @@ class KeepAliveService : Service() {
             )
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        // Android 12+ can refuse this (ForegroundServiceStartNotAllowedException), for example
+        // when the start came from the background and the app is not exempt from battery
+        // optimisation, or after the system restricted it. Uncaught, that refusal crashes the
+        // whole app; caught, the service just stops and the next process start tries again.
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "keep-alive service not allowed to run in the foreground", e)
+            stopSelf()
+            return START_NOT_STICKY
         }
         return START_STICKY
     }
@@ -93,21 +111,68 @@ class KeepAliveService : Service() {
          * background unless the app is exempt from battery optimisation, so this can fail before
          * the user grants that; the home-screen banner asks for it, and the next start succeeds.
          */
-        fun start(context: Context) {
+        private fun start(context: Context) {
             runCatching {
                 ContextCompat.startForegroundService(context, Intent(context, KeepAliveService::class.java))
             }.onFailure { Log.w(TAG, "could not start keep-alive service", it) }
+        }
+
+        /** Starts the service when [enabled] (the user's setting), stops it otherwise. */
+        fun sync(context: Context, enabled: Boolean) {
+            if (enabled) {
+                start(context)
+            } else {
+                runCatching { context.stopService(Intent(context, KeepAliveService::class.java)) }
+            }
+        }
+
+        /**
+         * Whether this phone probably kills background apps the way DuraSpeed does, which is
+         * the only reason the service exists. Used once, for the default of the setting.
+         *
+         * Errs towards yes: on a phone that needs the service and does not get it, alerts stop
+         * after the first use, while on one that gets it unneeded it only costs some memory. So
+         * any MediaTek chip counts, as does any e-paper maker (the HiBreak is both).
+         */
+        fun likelyNeeded(): Boolean {
+            val duraSpeed = listOf(
+                "/system_ext/framework/duraspeed.jar",
+                "/system/framework/duraspeed.jar",
+            ).any { runCatching { File(it).exists() }.getOrDefault(false) }
+            val hardware = Build.HARDWARE.orEmpty().lowercase(Locale.US)
+            val mediaTek = hardware.startsWith("mt") || hardware.contains("mediatek") ||
+                (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        Build.SOC_MANUFACTURER.orEmpty().contains("mediatek", ignoreCase = true)
+                    )
+            return duraSpeed || mediaTek || EInkDetect.looksLikeEInk()
         }
     }
 }
 
 /**
- * Brings the service back after a reboot or an app update. Process start alone is enough to run
- * [com.weatheralert.WeatherAlertApp.onCreate], which also starts it, but a receiver has to exist
- * for the system to start the process at all.
+ * Brings the service back after a reboot or an app update, if the setting is on. Process start
+ * alone is enough to run [com.weatheralert.WeatherAlertApp.onCreate], which also starts it, but a
+ * receiver has to exist for the system to start the process at all.
  */
 class KeepAliveStarter : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        KeepAliveService.start(context)
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
+            intent.action != Intent.ACTION_MY_PACKAGE_REPLACED
+        ) {
+            return
+        }
+        // The setting is in DataStore, which is read asynchronously; goAsync keeps the
+        // broadcast (and the boot-time permission to start a foreground service) open meanwhile.
+        val pending = goAsync()
+        val app = context.applicationContext
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                val enabled = AppStore(app).settingsNow().keepAlive
+                KeepAliveService.sync(app, enabled)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 }

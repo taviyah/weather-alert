@@ -36,7 +36,9 @@ object AlertEngine {
             if (date.isBefore(today) || date.isAfter(lastDay)) return@forEachIndexed
             // The temperature rules are all comparative; with no preceding day there is nothing
             // to compare against, so they sit out this iteration while rain and air still run.
-            val prev = days.getOrNull(i - 1)
+            // "Preceding" means the calendar day before: a day dropped for missing data must
+            // not turn a two-day gap into a one-day "sharp change".
+            val prev = days.getOrNull(i - 1)?.takeIf { it.localDate == date.minusDays(1) }
 
             fun add(kind: AlertKind, sev: Severity, headline: String, detail: String, short: String) {
                 out += WeatherAlert(
